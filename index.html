@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ArenaX — Custom Room Hub</title>
+<style>
+:root{--bg:#0b1020;--card:#141b31;--card2:#1b2440;--text:#f5f7ff;--muted:#9da8c5;--accent:#7c5cff;--green:#35d07f;--orange:#ff9f43;--red:#ff5d73}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#080c18,#0d1326);font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text)}
+.app{max-width:480px;margin:auto;min-height:100vh;padding-bottom:78px}
+header{padding:22px 18px 14px;position:sticky;top:0;background:#0b1020ee;backdrop-filter:blur(12px);z-index:3}
+.brand{font-size:25px;font-weight:800}.brand span{color:#8d76ff}.sub{color:var(--muted);font-size:13px;margin-top:3px}
+.balance{margin-top:14px;background:linear-gradient(135deg,#21194c,#182445);padding:16px;border-radius:18px;display:flex;justify-content:space-between;align-items:center}
+.balance b{font-size:20px}.coin{color:#ffd76b}
+main{padding:8px 16px}.hero{padding:16px 0 8px}.hero h1{font-size:27px;margin:0 0 5px}.hero p{color:var(--muted);margin:0}
+.tabs{display:flex;gap:8px;margin:15px 0}.tab{border:0;background:#151d34;color:#aeb8d0;padding:10px 14px;border-radius:12px;font-weight:700}.tab.active{background:var(--accent);color:white}
+.grid{display:grid;gap:12px}.card{background:var(--card);border:1px solid #222c49;border-radius:18px;padding:15px}.top{display:flex;justify-content:space-between;gap:8px}.tag{font-size:11px;font-weight:800;padding:6px 9px;border-radius:8px;background:#28213f;color:#cbbfff}.tag.br{background:#182c3a;color:#7de2ff}.title{font-size:18px;font-weight:800;margin:10px 0 5px}.muted{color:var(--muted);font-size:13px}.row{display:flex;justify-content:space-between;gap:10px;margin-top:12px}.stat{flex:1;background:var(--card2);border-radius:12px;padding:10px}.stat small{display:block;color:var(--muted);font-size:11px}.stat b{display:block;margin-top:3px}.btn{border:0;width:100%;padding:12px;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:800;margin-top:13px}.btn.secondary{background:#252e49}.btn.green{background:#178a55}.empty{padding:30px;text-align:center;color:var(--muted)}
+nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:480px;width:100%;height:68px;background:#0e1427f5;backdrop-filter:blur(12px);display:flex;justify-content:space-around;border-top:1px solid #222c49;z-index:4}
+nav button{background:none;border:0;color:#8994b2;font-size:11px;font-weight:700}nav button.active{color:#fff}nav span{display:block;font-size:21px;margin-bottom:2px}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:flex-end;z-index:10}.sheet{background:#121a30;width:100%;max-width:480px;margin:auto;border-radius:24px 24px 0 0;padding:20px;border:1px solid #293553}.sheet h2{margin-top:0}.close{float:right;background:none;border:0;color:white;font-size:24px}
+.notice{background:#241e3b;color:#d8d0ff;border-radius:12px;padding:11px;font-size:12px;margin-top:12px}
+</style>
+
+<style>
+.phone-note{position:fixed;left:10px;right:10px;bottom:82px;z-index:9999;background:#171f39;color:#fff;border:1px solid #2e3a63;border-radius:12px;padding:9px 12px;font:12px Arial;text-align:center;opacity:.92}
+</style>
+
+<style>
+.admin-panel{display:none;position:fixed;inset:0;z-index:10000;background:#080c18;color:#fff;padding:18px;overflow:auto}
+.admin-panel.show{display:block}
+.admin-card{background:#171f39;border:1px solid #2e3a63;border-radius:16px;padding:15px;margin:12px 0}
+.admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.admin-btn{border:0;border-radius:10px;padding:11px;background:#7c5cff;color:white;font-weight:700}
+.admin-close{float:right;background:#273052;color:white;border:0;border-radius:10px;padding:8px 12px}
+.admin-input{width:100%;box-sizing:border-box;padding:11px;border-radius:10px;border:1px solid #3a466d;background:#0f1528;color:#fff;margin:7px 0}
+.admin-row{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #293250}
+</style>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDecmH_TsImHYBE7JkUTudMTfdj0JVrVJ4",
+  authDomain: "arenax-d9e3f.firebaseapp.com",
+  projectId: "arenax-d9e3f",
+  storageBucket: "arenax-d9e3f.firebasestorage.app",
+  messagingSenderId: "613902637043",
+  appId: "1:613902637043:web:fc3ee8b4580236f1f3a486"
+};
+
+window.ArenaXFirebase = {ready:false, confirmationResult:null, recaptchaVerifier:null};
+
+try {
+  if (!firebaseConfig.apiKey.startsWith("PASTE_") && !firebaseConfig.appId.startsWith("PASTE_")) {
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    window.ArenaXFirebase.ready = true;
+    window.ArenaXFirebase.sendOtp = async (phone) => {
+      if (!window.ArenaXFirebase.recaptchaVerifier) {
+        window.ArenaXFirebase.recaptchaVerifier =
+          new RecaptchaVerifier(auth, "recaptcha-container", {size:"invisible"});
+      }
+      window.ArenaXFirebase.confirmationResult =
+        await signInWithPhoneNumber(auth, phone, window.ArenaXFirebase.recaptchaVerifier);
+    };
+    window.ArenaXFirebase.verifyOtp = async (code) => {
+      if (!window.ArenaXFirebase.confirmationResult) throw new Error("OTP session expired.");
+      const result = await window.ArenaXFirebase.confirmationResult.confirm(code);
+      return result.user;
+    };
+  }
+} catch (e) {
+  console.error("Firebase initialization error:", e);
+}
+</script>
+
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand">ArenaX<span>Arena</span></div>
+  <div class="sub">Free Fire custom rooms • CS + Battle Royale</div>
+  <div class="balance"><div><small class="muted">Demo Balance</small><br><b class="coin">🪙 <span id="coins">500</span> coins</b></div><button class="btn" style="width:auto;margin:0;padding:9px 12px" onclick="wallet()">Wallet</button></div>
+</header>
+<main id="content"></main>
+<nav>
+<button id="navHome" class="active" onclick="home()"><span>🏠</span>Home</button>
+<button id="navTournaments" onclick="tournaments()"><span>🏆</span>Tournaments</button>
+<button id="navHistory" onclick="historyPage()"><span>📜</span>History</button>
+<button id="navProfile" onclick="profile()"><span>👤</span>Profile</button>
+</nav>
+</div>
+
+<div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="modalBody"></div></div></div>
+
+<script>
+let coins=500;
+const data=[
+{id:1,type:'Clash Squad',format:'1v1',map:'Bermuda',title:'CS 1v1 Night Cup #1',fee:25,prize:500,slots:16,joined:9,time:'Today • 8:00 PM',tag:'CS'},
+{id:2,type:'Battle Royale',format:'Solo',map:'Purgatory',title:'BR Solo Challenge',fee:40,prize:800,slots:20,joined:13,time:'Today • 9:30 PM',tag:'BR'},
+{id:3,type:'Clash Squad',format:'2v2',map:'Kalahari',title:'CS 2v2 Weekend Knockout',fee:50,prize:1200,slots:24,joined:7,time:'Tomorrow • 7:00 PM',tag:'CS'},
+{id:4,type:'Battle Royale',format:'Squad',map:'Alpine',title:'BR Squad Arena',fee:30,prize:1000,slots:40,joined:22,time:'Tomorrow • 9:00 PM',tag:'BR'},
+{id:5,type:'Clash Squad',format:'1v1',map:'Purgatory',title:'CS 1v1 Purgatory Duel',fee:20,prize:400,slots:16,joined:4,time:'Tomorrow • 6:00 PM',tag:'CS'},
+{id:6,type:'Clash Squad',format:'2v2',map:'Alpine',title:'CS 2v2 Alpine Battle',fee:35,prize:700,slots:20,joined:8,time:'Tomorrow • 8:30 PM',tag:'CS'},
+{id:7,type:'Clash Squad',format:'2v2',map:'Bermuda',title:'CS 2v2 Bermuda Clash',fee:30,prize:600,slots:20,joined:6,time:'Sunday • 7:00 PM',tag:'CS'},
+{id:8,type:'Clash Squad',format:'1v1',map:'Kalahari',title:'CS 1v1 Kalahari Duel',fee:25,prize:500,slots:16,joined:5,time:'Sunday • 8:00 PM',tag:'CS'}
+];
+window.data=data;
+let joined=[]; window.joined=joined; window.joined=joined;
+function card(t){
+return `<div class="card"><div class="top"><span class="tag ${t.tag==='BR'?'br':''}">${t.type}</span><span class="muted">${t.time}</span></div>
+<div class="title">${t.title}</div><div class="muted">${t.type==='Clash Squad'?'⚔️ '+(t.format||'1v1')+' • 🗺️ '+(t.map||'Bermuda'):'👑 '+(t.format||'Solo')+' • 🗺️ '+(t.map||'Bermuda')} • Demo mode</div>
+<div class="row"><div class="stat"><small>Entry</small><b>🪙 ${t.fee}</b></div><div class="stat"><small>Prize Pool</small><b>🏆 ${t.prize}</b></div><div class="stat"><small>Slots</small><b>${t.joined}/${t.slots}</b></div></div>
+<button class="btn" type="button" onclick="openTournament(${t.id})">${joined.includes(t.id)?'Joined ✓':'Join Tournament'}</button></div>`;
+}
+function setNav(active){
+  ['Home','Tournaments','History','Profile'].forEach(x=>{
+    const el=document.getElementById('nav'+x);
+    if(el) el.classList.toggle('active', x===active);
+  });
+}
+function home(){
+  setNav('Home');
+  document.getElementById('content').innerHTML=`
+  <section class="hero"><h1>Welcome to ArenaX</h1><p>Find a tournament, check highlights and start competing.</p></section>
+  <div class="card" style="background:linear-gradient(135deg,#21194c,#182445)">
+    <div class="title">🔥 Featured Tournament</div>
+    <div class="muted">CS Night Cup #1 • Today • 8:00 PM</div>
+    <div class="row">
+      <div class="stat"><small>Entry</small><b>🪙 25</b></div>
+      <div class="stat"><small>Prize</small><b>🏆 500</b></div>
+      <div class="stat"><small>Slots</small><b>9/16</b></div>
+    </div>
+    <button class="btn" type="button" onclick="openTournament(1)">View & Join</button>
+  </div>
+  <div class="hero"><h2 style="margin:10px 0 5px">Choose Mode</h2><p>Directly open your preferred tournament category.</p></div>
+  <div class="row">
+    <button class="btn secondary" style="margin-top:0" onclick="filter('Clash Squad')">⚔️ Clash Squad</button>
+    <button class="btn secondary" style="margin-top:0" onclick="filter('Battle Royale')">👑 Battle Royale</button>
+  </div>
+  <div class="hero"><h2 style="margin:20px 0 5px">Why ArenaX?</h2><p>Simple tournament discovery, clear entry/prize information and match history.</p></div>`;
+}
+function tournaments(){ filter('All'); }
+function filter(type){
+  setNav('Tournaments');
+  const modeEl=document.getElementById('csModeFilter');
+  const mapEl=document.getElementById('csMapFilter');
+  const mode=modeEl?modeEl.value:'All';
+  const map=mapEl?mapEl.value:'All';
+  const list=data.filter(x=>(type==='All'||x.type===type) && (x.type!=='Clash Squad'||mode==='All'||(x.format||'1v1')===mode) && (x.type!=='Clash Squad'||map==='All'||(x.map||'Bermuda')===map));
+  document.getElementById('content').innerHTML=`
+  <section class="hero"><h1>${type==='All'?'All Tournaments':type}</h1><p>Choose 1v1 or 2v2 Clash Squad and select your preferred map.</p></section>
+  <div class="tabs">
+    <button class="tab ${type==='All'?'active':''}" onclick="filter('All')">All</button>
+    <button class="tab ${type==='Clash Squad'?'active':''}" onclick="filter('Clash Squad')">Clash Squad</button>
+    <button class="tab ${type==='Battle Royale'?'active':''}" onclick="filter('Battle Royale')">Battle Royale</button>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <label class="muted" for="csModeFilter">Clash Squad Mode</label>
+    <select id="csModeFilter" class="admin-input" style="margin:6px 0 12px" onchange="filter('${type}')">
+      <option value="All" ${mode==='All'?'selected':''}>All modes</option><option value="1v1" ${mode==='1v1'?'selected':''}>1v1 — Solo Duel</option><option value="2v2" ${mode==='2v2'?'selected':''}>2v2 — Duo Team</option>
+    </select>
+    <label class="muted" for="csMapFilter">Map</label>
+    <select id="csMapFilter" class="admin-input" style="margin:6px 0 0" onchange="filter('${type}')">
+      <option value="All" ${map==='All'?'selected':''}>All maps</option><option value="Bermuda" ${map==='Bermuda'?'selected':''}>Bermuda</option><option value="Purgatory" ${map==='Purgatory'?'selected':''}>Purgatory</option><option value="Kalahari" ${map==='Kalahari'?'selected':''}>Kalahari</option><option value="Alpine" ${map==='Alpine'?'selected':''}>Alpine</option>
+    </select>
+  </div>
+  <div class="grid">${list.length ? list.map(card).join('') : '<div class="empty">No tournaments are available for this mode or map yet.</div>'}</div>`;
+}
+
+function join(id){
+let t=data.find(x=>x.id===id);
+if(joined.includes(id)){alert('You are already joined in this demo tournament.');return}
+if(coins<t.fee){alert('Demo coins kam hain.');return}
+coins-=t.fee; joined.push(id);document.getElementById('coins').textContent=coins;
+openModal(`<h2>✅ Tournament Joined</h2><p class="muted">${t.title}</p><div class="notice">Demo entry: 🪙 ${t.fee}<br>Room ID and password may be published when the tournament starts.</div><button class="btn green" onclick="closeModal();home()">Go to Tournament</button>`);
+}
+function wallet(){
+  setNav('Profile');
+  document.getElementById('content').innerHTML=`
+  <section class="hero"><h1>Wallet</h1><p>Manage your demo tournament balance.</p></section>
+  <div class="card">
+    <small class="muted">Available Demo Balance</small>
+    <div style="font-size:32px;font-weight:900;margin:5px 0 16px">🪙 ${coins}</div>
+    <div class="row">
+      <button class="btn green" style="margin-top:0" onclick="depositDemo()">＋ Deposit</button>
+      <button class="btn secondary" style="margin-top:0" onclick="withdrawDemo()">↗ Withdraw</button>
+    </div>
+    <div class="notice">Testing mode: Deposit and Withdraw only simulate demo coins. No real payment or bank transfer is performed.</div>
+  </div>
+  <div class="hero"><h2 style="margin:10px 0 5px">Amount</h2><p>Select a demo amount to test the wallet flow.</p></div>
+  <div class="row">
+    <button class="btn secondary" style="margin-top:0" onclick="amountDemo(50)">🪙 50</button>
+    <button class="btn secondary" style="margin-top:0" onclick="amountDemo(100)">🪙 100</button>
+    <button class="btn secondary" style="margin-top:0" onclick="amountDemo(250)">🪙 250</button>
+  </div>`;
+}
+function amountDemo(amount){
+  openModal(`<h2>Amount Selected</h2><p class="muted">You selected 🪙 ${amount} demo coins.</p><div class="notice">Real-money transactions are disabled in this testing prototype.</div><button class="btn" onclick="closeModal()">Close</button>`);
+}
+function depositDemo(){
+  openModal(`<h2>Demo Deposit</h2><p class="muted">Choose a demo amount.</p>
+  <div class="row"><button class="btn secondary" onclick="addDemo(50)">+50</button><button class="btn secondary" onclick="addDemo(100)">+100</button></div>
+  <div class="row"><button class="btn secondary" onclick="addDemo(250)">+250</button><button class="btn secondary" onclick="addDemo(500)">+500</button></div>
+  <div class="notice">Demo only — no real payment gateway is connected.</div>`);
+}
+function addDemo(amount){
+  coins += amount;
+  document.getElementById('coins').textContent=coins;
+  closeModal();
+  wallet();
+}
+function withdrawDemo(){
+  openModal(`<h2>Demo Withdraw</h2><p class="muted">Choose demo coins to subtract from your balance.</p>
+  <div class="row"><button class="btn secondary" onclick="subtractDemo(50)">−50</button><button class="btn secondary" onclick="subtractDemo(100)">−100</button></div>
+  <div class="row"><button class="btn secondary" onclick="subtractDemo(250)">−250</button><button class="btn secondary" onclick="subtractDemo(500)">−500</button></div>
+  <div class="notice">Demo only — no bank/UPI withdrawal is performed.</div>`);
+}
+function subtractDemo(amount){
+  if(coins < amount){ alert('Insufficient demo balance.'); return; }
+  coins -= amount;
+  document.getElementById('coins').textContent=coins;
+  closeModal();
+  wallet();
+}
+
+function historyPage(){setNav('History');document.getElementById('content').innerHTML=`<section class="hero"><h1>Match History</h1><p>Your demo tournament activity</p></section><div class="grid">${joined.length?joined.map(id=>{let t=data.find(x=>x.id===id);return `<div class="card"><b>${t.title}</b><p class="muted">${t.type} • Joined successfully</p><span class="tag">Demo</span></div>`}).join(''):`<div class="empty">You have not joined any tournaments yet.</div>`}</div>`}
+function profile(){
+  setNav('Profile');
+  const savedName=localStorage.getItem('arenax_name')||'Player';
+  const savedMobile=localStorage.getItem('arenax_mobile')||'Not available';
+  const adminOn=sessionStorage.getItem('arenax_admin_on')==='1';
+  document.getElementById('content').innerHTML=`
+  <section class="hero"><h1>My Profile</h1><p>Your ArenaX account details</p></section>
+  <div class="card">
+    <div class="title">👤 ${escapeProfileText(savedName)}</div>
+    <div class="muted" style="margin-top:8px">📱 Mobile Number</div>
+    <div style="font-weight:800;margin-top:4px">${escapeProfileText(savedMobile)}</div>
+    <div class="row">
+      <div class="stat"><small>Tournaments Joined</small><b>${joined.length}</b></div>
+      <div class="stat"><small>Demo Coins</small><b>🪙 ${coins}</b></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="top" style="align-items:center"><div><div class="title" style="margin:0">🛡️ Admin Mode</div><div class="muted" style="margin-top:5px">Password required for admin controls.</div></div>
+    <button id="adminToggle" type="button" aria-pressed="${adminOn}" onclick="toggleAdminMode()" style="min-width:82px;border:0;border-radius:22px;padding:10px 13px;font-weight:800;background:${adminOn?'#178a55':'#303a55'};color:#fff">${adminOn?'ON':'OFF'}</button></div>
+    <div class="notice">${adminOn?'Admin mode is ON.':'Admin mode is OFF.'} Demo PIN: 2468</div>
+  </div>
+  <button class="btn secondary" type="button" onclick="arenaXLogout()">Log Out</button>
+  <div class="notice">ArenaX testing profile. Demo coins only; no real-money transactions.</div>`;
+}
+function escapeProfileText(value){return String(value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]});}
+function toggleAdminMode(){
+  const isOn=sessionStorage.getItem('arenax_admin_on')==='1';
+  if(isOn){sessionStorage.removeItem('arenax_admin_on');closeAdmin();profile();return;}
+  const pin=prompt('Enter the admin password / PIN:');
+  if(pin===null)return;
+  if(pin==='2468'){
+    sessionStorage.setItem('arenax_admin_on','1');
+    profile();
+    document.getElementById('adminPanel').classList.add('show');
+    updateAdminStats();
+  }else{alert('Wrong password / PIN.');}
+}
+function arenaXLogout(){sessionStorage.removeItem('arenax_logged_in');localStorage.removeItem('arenax_logged_in');document.getElementById('loginScreen').style.display='flex';document.getElementById('loginStep1').style.display='block';document.getElementById('loginStep2').style.display='none';document.getElementById('loginOtp').value='';document.getElementById('loginError').style.display='none';document.getElementById('otpError').style.display='none';document.getElementById('firebaseOtpStatus').textContent='Demo mode: use OTP 252528.';}
+function openModal(x){document.getElementById('modalBody').innerHTML=x;document.getElementById('modal').style.display='flex'}
+function closeModal(){document.getElementById('modal').style.display='none'}
+home();
+</script>
+
+
+
+<div id="loginScreen" style="position:fixed;inset:0;background:linear-gradient(180deg,#080c18,#10172b);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:420px;background:#141b31;border:1px solid #273452;border-radius:24px;padding:24px;box-sizing:border-box">
+    <div style="font-size:30px;font-weight:900;margin-bottom:5px">Arena<span style="color:#8d76ff">X</span></div>
+    <div class="muted" style="margin-bottom:22px">Sign in to ArenaX</div>
+
+    <div id="loginStep1">
+      <label class="muted">Name</label>
+      <input id="loginName" type="text" placeholder="Your name" maxlength="40"
+        style="display:block;width:100%;box-sizing:border-box;margin:7px 0 15px;padding:13px;border-radius:12px;border:1px solid #2a3655;background:#0e1528;color:white;font-size:16px;outline:none">
+
+      <label class="muted">Mobile Number</label>
+      <input id="loginMobile" type="tel" inputmode="numeric" placeholder="10 digit mobile number" maxlength="10"
+        style="display:block;width:100%;box-sizing:border-box;margin:7px 0 8px;padding:13px;border-radius:12px;border:1px solid #2a3655;background:#0e1528;color:white;font-size:16px;outline:none">
+
+      <div id="loginError" style="display:none;color:#ff8090;font-size:13px;margin:8px 0"></div>
+      <button class="btn" id="continueLoginBtn" type="button">Continue</button>
+    </div>
+
+    <div id="loginStep2" style="display:none">
+      <div style="font-weight:800;font-size:18px;margin-bottom:8px">Verify OTP</div>
+      <div class="muted" style="font-size:13px;margin-bottom:14px">Enter the 6-digit demo OTP: 252528.</div>
+
+      <label class="muted">6-digit OTP</label>
+      <input id="loginOtp" type="tel" inputmode="numeric" placeholder="123456" maxlength="6"
+        style="display:block;width:100%;box-sizing:border-box;margin:7px 0 8px;padding:13px;border-radius:12px;border:1px solid #2a3655;background:#0e1528;color:white;font-size:18px;letter-spacing:5px;outline:none">
+<div id="recaptcha-container"></div>
+<div id="firebaseOtpStatus" style="font-size:12px;color:#94a3b8;margin:8px 0"></div>
+
+
+      <div id="otpError" style="display:none;color:#ff8090;font-size:13px;margin:8px 0"></div>
+      <button class="btn" id="verifyOtpBtn" type="button">Verify & Continue</button>
+      <button type="button" id="backLoginBtn" style="width:100%;margin-top:10px;background:none;border:0;color:#aeb9d4;padding:10px">← Change Number</button>
+    </div>
+
+    <div class="notice">Demo login • Any 10-digit mobile number works with OTP 252528. No SMS is sent.</div>
+  </div>
+</div>
+
+>
+
+
+<script>
+(function(){
+  function ready(){
+    var screen=document.getElementById('loginScreen');
+    if(sessionStorage.getItem('arenax_logged_in')==='1'){ screen.style.display='none'; }
+    var step1=document.getElementById('loginStep1');
+    var step2=document.getElementById('loginStep2');
+    var name=document.getElementById('loginName');
+    var mobile=document.getElementById('loginMobile');
+    var otp=document.getElementById('loginOtp');
+    var err=document.getElementById('loginError');
+    var otpErr=document.getElementById('otpError');
+    var status=document.getElementById('firebaseOtpStatus');
+    var verifiedMobile='';
+
+    document.getElementById('continueLoginBtn').onclick=async function(){
+      var n=name.value.trim();
+      var m=mobile.value.trim();
+      if(n.length<2){
+        err.textContent='Please enter a valid name.';
+        err.style.display='block';
+        return;
+      }
+      if(!/^[0-9]{10}$/.test(m)){
+        err.textContent='Mobile number 10 digits ka hona chahiye.';
+        err.style.display='block';
+        return;
+      }
+
+      err.style.display='none';
+      verifiedMobile=m;
+      step1.style.display='none';
+      step2.style.display='block';
+      status.textContent='Demo mode: no SMS will be sent. Use demo OTP 252528.';
+      otp.value='';
+      setTimeout(function(){ otp.focus(); },50);
+    };
+
+    document.getElementById('verifyOtpBtn').onclick=async function(){
+      var code=otp.value.trim();
+      if(!/^[0-9]{6}$/.test(code)){
+        otpErr.textContent='6-digit OTP enter karein.';
+        otpErr.style.display='block';
+        return;
+      }
+
+      otpErr.style.display='none';
+      status.textContent='Checking demo OTP...';
+      if(code==='252528'){
+        var user=document.getElementById('userName');
+        if(user) user.textContent=name.value.trim();
+        localStorage.setItem('arenax_name',name.value.trim());
+        localStorage.setItem('arenax_mobile',verifiedMobile);
+        localStorage.removeItem('arenax_firebase_uid');
+        sessionStorage.setItem('arenax_logged_in','1');
+        localStorage.setItem('arenax_logged_in','1'); // legacy flag; ignored by login screen
+        screen.style.display='none';
+        if(typeof home==='function') home();
+      }else{
+        otpErr.textContent='Incorrect demo OTP. Please enter 252528.';
+        otpErr.style.display='block';
+        status.textContent='Demo mode — no SMS is sent.';
+      }
+    };
+
+    document.getElementById('backLoginBtn').onclick=async function(){
+      step2.style.display='none';
+      step1.style.display='block';
+      otp.value='';
+      try { if(window.ArenaXFirebase && window.ArenaXFirebase.recaptchaVerifier) { await window.ArenaXFirebase.recaptchaVerifier.clear(); window.ArenaXFirebase.recaptchaVerifier=null; } } catch(resetError) { console.warn(resetError); }
+      otpErr.style.display='none';
+      status.textContent='';
+    };
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',ready);
+  else ready();
+})();
+</script>
+
+
+<div id="tournamentModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10000;padding:18px;overflow:auto">
+  <div style="max-width:480px;margin:35px auto;background:#141b31;border:1px solid #2a3655;border-radius:22px;padding:20px">
+    <button id="closeTournamentModal" type="button" style="float:right;background:none;border:0;color:#aeb9d4;font-size:24px">×</button>
+    <div id="modalMode" class="muted" style="font-size:13px"></div>
+    <h2 id="modalTitle" style="margin:6px 0 16px"></h2>
+
+    <div id="tournamentInfo">
+      <div class="notice" id="modalStats"></div>
+      <div class="notice" style="margin-top:10px">📅 Future match: Aap aaj hi tournament join kar sakte ho. Room ID aur Password match start hone ke time ke paas unlock honge.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">
+        <div class="card"><div class="muted">Entry</div><b id="modalEntry"></b></div>
+        <div class="card"><div class="muted">Prize Pool</div><b id="modalPrize"></b></div>
+        <div class="card"><div class="muted">Players</div><b id="modalPlayers"></b></div>
+        <div class="card"><div class="muted">Start</div><b id="modalStart"></b></div>
+      </div>
+      <button class="btn" id="joinTournamentBtn" type="button">Join Tournament</button>
+      <div id="joinMessage" class="notice" style="display:none"></div>
+    </div>
+
+    <div id="roomInfo" style="display:none">
+      <div class="notice"><b>You're Joined!</b><br>Aapne future tournament join kar liya hai. Match start hone par Room ID aur Password unlock honge.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">
+        <div class="card"><div class="muted">Room ID</div><b id="roomId">—</b></div>
+        <div class="card"><div class="muted">Password</div><b id="roomPassword">—</b></div>
+      </div>
+      <div class="muted" style="font-size:13px">Demo room credentials are for testing only. A live match room is not connected yet.</div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<script>
+(function(){
+  var modal=document.getElementById('tournamentModal');
+  if(!modal) return;
+
+  window.openTournament=function(id){
+    var t=(window.data||[]).find(function(x){return x.id===Number(id);});
+    if(!t) return;
+    window.selectedTournamentId=t.id;
+
+    document.getElementById('modalMode').textContent=t.type.toUpperCase();
+    document.getElementById('modalTitle').textContent=t.title;
+    document.getElementById('modalStats').textContent =
+      (t.type==='Clash Squad' ? 'Clash Squad • '+(t.format||'1v1')+' • Map: '+(t.map||'Bermuda') : 'Battle Royale • '+(t.format||'Solo')+' • Map: '+(t.map||'Bermuda')) +
+      ' • Demo Match • ' + t.time;
+    document.getElementById('modalEntry').textContent=t.fee+' Coins';
+    document.getElementById('modalPrize').textContent=t.prize+' Coins';
+    document.getElementById('modalPlayers').textContent=t.joined+'/'+t.slots;
+    document.getElementById('modalStart').textContent=t.time;
+
+    var already=window.joined.includes(t.id);
+    var btn=document.getElementById('joinTournamentBtn');
+    btn.textContent=already?'Joined ✓':'Join Tournament';
+    btn.disabled=already;
+    document.getElementById('joinMessage').style.display='none';
+    document.getElementById('roomInfo').style.display=already?'block':'none';
+    modal.style.display='block';
+  };
+
+  document.getElementById('closeTournamentModal').addEventListener('click',function(){
+    modal.style.display='none';
+  });
+
+  document.getElementById('joinTournamentBtn').addEventListener('click',function(){
+    var t=(window.data||[]).find(function(x){return x.id===Number(window.selectedTournamentId);});
+    if(!t || window.joined.includes(t.id)) return;
+
+    if(window.coins < t.fee){
+      var no=document.getElementById('joinMessage');
+      no.textContent='Insufficient demo coins. Add demo coins from your wallet.';
+      no.style.display='block';
+      return;
+    }
+
+    window.coins -= t.fee;
+    window.joined.push(t.id);
+    t.joined=Math.min(t.joined+1,t.slots);
+
+    var coin=document.getElementById('coins');
+    if(coin) coin.textContent=window.coins;
+
+    document.getElementById('joinTournamentBtn').textContent='Joined ✓';
+    document.getElementById('joinTournamentBtn').disabled=true;
+    document.getElementById('modalPlayers').textContent=t.joined+'/'+t.slots;
+
+    var ok=document.getElementById('joinMessage');
+    ok.textContent='✅ '+t.title+' successfully joined. Entry: '+t.fee+' demo coins.';
+    ok.style.display='block';
+    document.getElementById('roomInfo').style.display='block';
+  });
+})();
+</script>
+
+
+<div class="phone-note">ArenaX phone demo • Free-entry / demo coins</div>
+<script>
+try {
+  const old = window.localStorage.getItem('arenax_phone_opened');
+  if (!old) window.localStorage.setItem('arenax_phone_opened','1');
+} catch(e) {}
+</script>
+
+<div id="adminPanel" class="admin-panel">
+  <button class="admin-close" onclick="closeAdmin()">Close</button>
+  <h2>ArenaX Admin</h2>
+  <p style="opacity:.75">Local demo admin panel — not a production security system.</p>
+
+  <div class="admin-card">
+    <h3>Create Tournament</h3>
+    <input id="admName" class="admin-input" placeholder="Tournament name">
+    <select id="admMode" class="admin-input" onchange="adminModeFields()">
+      <option>Clash Squad</option><option>Battle Royale</option>
+    </select>
+    <select id="admFormat" class="admin-input"><option value="1v1">1v1</option><option value="2v2">2v2</option><option value="Solo">Solo</option><option value="Squad">Squad</option></select>
+    <select id="admMap" class="admin-input"><option>Bermuda</option><option>Purgatory</option><option>Kalahari</option><option>Alpine</option></select>
+    <input id="admFee" class="admin-input" type="number" placeholder="Demo entry coins">
+    <input id="admStart" class="admin-input" type="datetime-local">
+    <button class="admin-btn" onclick="adminCreate()">Create</button>
+  </div>
+
+  <div class="admin-card">
+    <h3>Users / Stats</h3>
+    <div class="admin-grid">
+      <div><b id="admJoined">0</b><br><small>Joined</small></div>
+      <div><b id="admCoins">0</b><br><small>Demo Coins</small></div>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <h3>Match Room Details</h3>
+    <input id="admRoomId" class="admin-input" placeholder="Room ID">
+    <input id="admRoomPass" class="admin-input" placeholder="Room Password">
+    <button class="admin-btn" onclick="adminSaveRoom()">Save Room</button>
+  </div>
+
+  <div class="admin-card">
+    <h3>OTP Configuration</h3>
+    <p style="font-size:13px;opacity:.8">Real SMS OTP must be handled by a trusted authentication provider/backend. Never put SMS provider secret keys in this HTML file.</p>
+    <div class="admin-row"><span>OTP provider</span><b>Backend required</b></div>
+    <div class="admin-row"><span>Demo OTP</span><b>Disabled for production</b></div>
+  </div>
+</div>
+
+<script>
+function openAdmin(){
+  const pin = prompt("Admin PIN:");
+  if(pin === "2468"){
+    sessionStorage.setItem("arenax_admin_on","1");
+    document.getElementById("adminPanel").classList.add("show");
+    updateAdminStats();
+  } else if(pin !== null) alert("Wrong admin PIN");
+}
+function closeAdmin(){ document.getElementById("adminPanel").classList.remove("show"); sessionStorage.removeItem("arenax_admin_on"); }
+function updateAdminStats(){
+  let j=[]; try{j=JSON.parse(localStorage.getItem('arenax_joined')||'[]')}catch(e){}
+  document.getElementById('admJoined').textContent=j.length;
+  document.getElementById('admCoins').textContent=localStorage.getItem('arenax_coins')||'500';
+}
+function adminModeFields(){
+  const mode=document.getElementById('admMode').value;
+  const format=document.getElementById('admFormat');
+  format.innerHTML=mode==='Clash Squad'?'<option value="1v1">1v1</option><option value="2v2">2v2</option>':'<option value="Solo">Solo</option><option value="Squad">Squad</option>' ;
+}
+function adminCreate(){
+  const name=document.getElementById('admName').value.trim();
+  if(!name){alert('Tournament name required');return;}
+  const type=document.getElementById('admMode').value;
+  const format=document.getElementById('admFormat').value;
+  const map=document.getElementById('admMap').value;
+  const fee=Math.max(0,Number(document.getElementById('admFee').value)||0);
+  const id=Math.max(0,...data.map(t=>t.id))+1;
+  data.push({id,type,format,map,title:name,fee,prize:fee*10,slots: type==='Clash Squad'?(format==='1v1'?16:20):(format==='Solo'?20:40),joined:0,time:document.getElementById('admStart').value||'Time to be announced',tag:type==='Clash Squad'?'CS':'BR'});
+  alert('Tournament added: '+name+' • '+format+' • '+map);
+  document.getElementById('admName').value='';
+  if(document.getElementById('content')) tournaments();
+}
+function adminSaveRoom(){
+  const id=document.getElementById('admRoomId').value.trim();
+  const pw=document.getElementById('admRoomPass').value.trim();
+  if(!id||!pw){alert('Room ID and password required');return;}
+  localStorage.setItem('arenax_room_id',id);
+  localStorage.setItem('arenax_room_pass',pw);
+  alert('Room details saved locally for this demo.');
+}
+</script>
+<!-- Demo security note: PIN 2468 is client-side only; use Firebase custom claims/backend authorization before production. -->
+
+<style>
+#axFeatureFab{position:fixed;right:12px;bottom:82px;z-index:9997;border:0;border-radius:18px;padding:11px 14px;background:#7c5cff;color:white;font-weight:800;box-shadow:0 6px 24px #0007}
+.ax-feature-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.ax-feature-btn{border:1px solid #2b3658;background:#1b2440;color:#fff;border-radius:14px;padding:14px 8px;text-align:left;font-weight:800;min-height:76px}
+.ax-feature-btn small{display:block;color:#aeb8d0;font-weight:500;margin-top:5px}
+.ax-map-card{border-radius:14px;padding:14px;min-height:90px;background:linear-gradient(135deg,#243f4b,#172039);border:1px solid #33415f}
+.ax-input{width:100%;padding:12px;border-radius:10px;border:1px solid #3a466d;background:#0f1528;color:#fff;margin:7px 0;box-sizing:border-box}
+</style>
+<button id="axFeatureFab" onclick="axFeatureHub()">☰ Features</button>
+<script>
+(function(){
+  const get=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+  const put=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  window.axTeams=get('arenax_teams',[]);
+  window.axNotifications=get('arenax_notifications',[
+    {title:'Welcome to ArenaX',body:'Your demo tournament hub is ready.',time:new Date().toLocaleString()},
+    {title:'Tournament reminder',body:'Check My Matches for room details before a match.',time:new Date().toLocaleString()}
+  ]);
+  function currentName(){return localStorage.getItem('arenax_name')||'Player'}
+  function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  window.axFeatureHub=function(){
+    openModal(`<h2>🎮 ArenaX Features</h2><p class="muted">All features in this single-file demo.</p><div class="ax-feature-grid">
+    <button class="ax-feature-btn" onclick="axTeamsPage();closeModal()">👥 Team System<small>Create a team or join one</small></button>
+    <button class="ax-feature-btn" onclick="axLeaderboard();closeModal()">🏆 Leaderboard<small>Demo player rankings</small></button>
+    <button class="ax-feature-btn" onclick="axRooms();closeModal()">🔑 Match Room Details<small>Joined matches only</small></button>
+    <button class="ax-feature-btn" onclick="axCustomRoom();closeModal()">🎮 Custom Room Hub<small>Create, save, and share room details</small></button>
+    <button class="ax-feature-btn" onclick="axNotify();closeModal()">🔔 Notifications<small>In-app activity feed</small></button>
+    <button class="ax-feature-btn" onclick="axMaps();closeModal()">🗺️ Map Preview<small>Bermuda and 3 more maps</small></button>
+    <button class="ax-feature-btn" onclick="axStats();closeModal()">📊 Player Statistics<small>Your demo activity</small></button></div>
+    <div class="notice">Demo only: teams and notifications are stored on this device. They are not shared across players until a database/backend is connected.</div>`);
+  };
+  window.axCustomRoom=function(){
+    const rooms=get('arenax_custom_rooms',[]);
+    document.getElementById('content').innerHTML=`<section class="hero"><h1>🎮 Custom Room Hub</h1><p>Create your custom match in Free Fire first, then enter its details here to organize your friends.</p></section>
+    <div class="card"><h3>Save a Room You Created in Free Fire</h3><label class="muted">Room Name</label><input id="axRoomName" class="ax-input" placeholder="e.g. Friday Friends Match" maxlength="50"><label class="muted">Room ID</label><input id="axRoomIdInput" class="ax-input" inputmode="numeric" placeholder="Enter the room ID" maxlength="30"><label class="muted">Room Password</label><input id="axRoomPassInput" class="ax-input" placeholder="Enter the room password" maxlength="40"><label class="muted">Mode</label><select id="axRoomMode" class="ax-input"><option>Clash Squad</option><option>Battle Royale</option><option>Other</option></select><label class="muted">Map</label><select id="axRoomMap" class="ax-input"><option>Bermuda</option><option>Purgatory</option><option>Kalahari</option><option>Alpine</option><option>Other</option></select><label class="muted">Start Time</label><input id="axRoomTime" class="ax-input" placeholder="e.g. Today, 8:30 PM"><button class="btn" onclick="axSaveCustomRoom()">Save Room Details</button><div class="notice">ArenaX cannot automatically read a Free Fire room from its ID/password. Enter the details shown in Free Fire manually. This saves and shares the information; it does not create or launch the in-game match.</div></div>
+    <section class="hero"><h2>Your Saved Rooms</h2></section>${rooms.slice().reverse().map((r,i)=>`<div class="card"><div class="title">${esc(r.name)}</div><p class="muted">${esc(r.mode)} • ${esc(r.map)} • ${esc(r.time||'Time not set')}</p><div class="notice">Room ID: <b>${esc(r.id)}</b><br>Room Password: <b>${esc(r.pass)}</b></div><button class="btn green" onclick="axShareCustomRoom('${r.key}')">Share with Friends</button><button class="btn secondary" onclick="axStartCustomRoom('${r.key}')">Ready to Play</button><button class="btn secondary" onclick="axDeleteCustomRoom('${r.key}')">Delete Room</button></div>`).join('')||'<div class="empty">No rooms saved yet. Create a custom room in Free Fire, then enter its details above.</div>'}`;
+  };
+  window.axSaveCustomRoom=function(){
+    const name=document.getElementById('axRoomName').value.trim()||'Friends Custom Room';
+    const id=document.getElementById('axRoomIdInput').value.trim();
+    const pass=document.getElementById('axRoomPassInput').value.trim();
+    const mode=document.getElementById('axRoomMode').value, map=document.getElementById('axRoomMap').value, time=document.getElementById('axRoomTime').value.trim();
+    if(!id||!pass){alert('Please enter both the Free Fire Room ID and Password.');return;}
+    const rooms=get('arenax_custom_rooms',[]);const key='R'+Date.now();rooms.push({key,name,id,pass,mode,map,time,createdAt:new Date().toISOString()});put('arenax_custom_rooms',rooms.slice(-30));
+    if(window.axAddNotice)axAddNotice('Custom room saved',name+' • '+mode+' • '+map);
+    axCustomRoom();
+  };
+  window.axShareCustomRoom=function(key){
+    const r=get('arenax_custom_rooms',[]).find(x=>x.key===key);if(!r)return;
+    const message=`ArenaX Friends Match\n${r.name}\nMode: ${r.mode}\nMap: ${r.map}\nRoom ID: ${r.id}\nRoom Password: ${r.pass}\nStart: ${r.time||'Not set'}\nOpen Free Fire and join this room.`;
+    if(navigator.share){navigator.share({title:'ArenaX Custom Room',text:message}).catch(()=>{});}else if(navigator.clipboard){navigator.clipboard.writeText(message).then(()=>alert('Room details copied. Paste them into your friends chat.')).catch(()=>openModal('<h2>Share Room</h2><p>Copy the room details from the saved room card and send them to your friends.</p>'));}else{openModal('<h2>Share Room</h2><p>Copy the Room ID and password from the saved room card and send them to your friends.</p>');}
+  };
+  window.axStartCustomRoom=function(key){const r=get('arenax_custom_rooms',[]).find(x=>x.key===key);if(!r)return;openModal(`<h2>Ready to Play?</h2><p><b>${esc(r.name)}</b></p><div class="notice">Mode: ${esc(r.mode)}<br>Map: ${esc(r.map)}<br>Room ID: <b>${esc(r.id)}</b><br>Password: <b>${esc(r.pass)}</b><br>Start: ${esc(r.time||'Not set')}</div><p class="muted">Open Free Fire, go to the custom room screen, and use these details there. ArenaX cannot start or control the match inside Free Fire.</p><button class="btn" onclick="closeModal()">Got It</button>`)};
+  window.axDeleteCustomRoom=function(key){put('arenax_custom_rooms',get('arenax_custom_rooms',[]).filter(x=>x.key!==key));axCustomRoom()};
+  window.axTeamsPage=function(){
+    const teams=get('arenax_teams',[]); const mine=teams.filter(t=>t.members.includes(currentName()));
+    document.getElementById('content').innerHTML=`<section class="hero"><h1>👥 Team System</h1><p>Create a team or join an existing demo team.</p></section>
+    <div class="card"><h3>Create a Team</h3><input id="axTeamName" class="ax-input" placeholder="Team name" maxlength="30"><select id="axTeamMode" class="ax-input"><option>Clash Squad 2v2</option><option>Battle Royale Squad</option></select><button class="btn" onclick="axCreateTeam()">＋ Create a Team</button></div>
+    <div class="hero"><h2>My Teams (${mine.length})</h2></div>${mine.map(t=>`<div class="card"><b>${esc(t.name)}</b><p class="muted">${esc(t.mode)} • ${t.members.length} member(s)</p><p>${t.members.map(esc).join(', ')}</p><button class="btn secondary" onclick="axInvite('${t.id}')">Show Team Code</button></div>`).join('')||'<div class="empty">You are not a member of any team yet.</div>'}
+    <div class="hero"><h2>Available Teams</h2></div>${teams.filter(t=>!t.members.includes(currentName())).map(t=>`<div class="card"><b>${esc(t.name)}</b><p class="muted">${esc(t.mode)} • ${t.members.length}/4 members</p><button class="btn" onclick="axJoinTeam('${t.id}')">Join a Team</button></div>`).join('')||'<div class="empty">No other teams available. Create one to get started.</div>'}`;
+  };
+  window.axCreateTeam=function(){const name=document.getElementById('axTeamName').value.trim();if(name.length<2){alert('Team name must be at least 2 characters.');return}const teams=get('arenax_teams',[]);const t={id:'T'+Date.now(),name,mode:document.getElementById('axTeamMode').value,members:[currentName()],code:String(Math.floor(1000+Math.random()*9000))};teams.push(t);put('arenax_teams',teams);axAddNotice('Team created',name+' team successfully created.');axTeamsPage()};
+  window.axJoinTeam=function(id){const teams=get('arenax_teams',[]);const t=teams.find(x=>x.id===id);if(!t)return;if(t.members.length>=4){alert('This team is full.');return}t.members.push(currentName());put('arenax_teams',teams);axAddNotice('Team joined','You joined '+t.name+'.');axTeamsPage()};
+  window.axInvite=function(id){const t=get('arenax_teams',[]).find(x=>x.id===id);if(t)openModal(`<h2>Team Code</h2><div class="notice">${esc(t.name)}  demo invite code: <b>${esc(t.code)}</b><br>Share this code with your teammates. In this demo, team codes do not sync across devices.</div><button class="btn" onclick="closeModal()">Close</button>`)};
+  window.axLeaderboard=function(){const demo=[{n:currentName(),w:Math.min(joined.length,3),p:joined.length*100+250},{n:'ShadowX',w:8,p:920},{n:'NovaFF',w:7,p:840},{n:'BlazeYT',w:6,p:710},{n:'Raven',w:4,p:520}].sort((a,b)=>b.p-a.p);document.getElementById('content').innerHTML=`<section class="hero"><h1>🏆 Leaderboard</h1><p>Demo rankings — not a live global leaderboard.</p></section><div class="grid">${demo.map((x,i)=>`<div class="card"><div class="top"><b>${['🥇','🥈','🥉'][i]||'#'+(i+1)} ${esc(x.n)}</b><span class="tag">${x.p} pts</span></div><div class="muted" style="margin-top:8px">Demo wins: ${x.w} • Rank ${i+1}</div></div>`).join('')}</div>`};
+  window.axRooms=function(){const ids=get('arenax_joined',joined||[]);const room=get('arenax_room_id','');const pass=get('arenax_room_pass','');document.getElementById('content').innerHTML=`<section class="hero"><h1>🔑 My Match Rooms</h1><p>Room information is visible only for matches joined on this device.</p></section>${ids.map(id=>{const t=data.find(x=>x.id===id);return t?`<div class="card"><b>${esc(t.title)}</b><p class="muted">${esc(t.type)} • ${esc(t.format||'')} • ${esc(t.map||'')}</p><div class="notice">Room ID: <b>${room?esc(room):'Not published yet'}</b><br>Room Password: <b>${pass?esc(pass):'Not published yet'}</b></div></div>`:''}).join('')||'<div class="empty">Join a tournament first.</div>'}<div class="notice">Admin room details local demo mein save karta hai. Production mein room credentials ko server rules se protect karein.</div>`};
+  window.axNotify=function(){const ns=get('arenax_notifications',[]);document.getElementById('content').innerHTML=`<section class="hero"><h1>🔔 Notifications</h1><p>In-app updates for this device.</p></section><button class="btn secondary" onclick="axClearNotices()">Clear notifications</button><div class="grid" style="margin-top:12px">${ns.slice().reverse().map(n=>`<div class="card"><b>${esc(n.title)}</b><p class="muted">${esc(n.time)}</p><div>${esc(n.body)}</div></div>`).join('')||'<div class="empty">No notifications.</div>'}</div>`};
+  window.axClearNotices=function(){put('arenax_notifications',[]);axNotify()};
+  window.axAddNotice=function(title,body){const ns=get('arenax_notifications',[]);ns.push({title,body,time:new Date().toLocaleString()});put('arenax_notifications',ns.slice(-50))};
+  window.axMaps=function(){const maps=[['Bermuda','Tropical island battleground','🌴'],['Purgatory','River and woodland terrain','🌲'],['Kalahari','Desert arena','🏜️'],['Alpine','Snowy mountain setting','🏔️']];document.getElementById('content').innerHTML=`<section class="hero"><h1>🗺️ Map Preview</h1><p>Choose a map to browse its demo tournaments.</p></section><div class="grid">${maps.map(m=>`<div class="ax-map-card"><div style="font-size:30px">${m[2]}</div><h3 style="margin:7px 0">${m[0]}</h3><div class="muted">${m[1]}</div><button class="btn" onclick="filter('Clash Squad');setTimeout(()=>{const s=document.getElementById('csMapFilter');if(s){s.value='${m[0]}';filter('Clash Squad')}},0)">View tournaments</button></div>`).join('')}</div><div class="notice">Stylized previews only; original game map images are not embedded.</div>`};
+  window.axStats=function(){const ids=get('arenax_joined',joined||[]);const wins=get('arenax_demo_wins',Math.floor(ids.length/3));const coinsNow=document.getElementById('coins')?.textContent||get('arenax_coins','500');document.getElementById('content').innerHTML=`<section class="hero"><h1>📊 Player Statistics</h1><p>${esc(currentName())} • Demo statistics</p></section><div class="row"><div class="stat"><small>Joined matches</small><b>${ids.length}</b></div><div class="stat"><small>Demo wins</small><b>${wins}</b></div></div><div class="row"><div class="stat"><small>Demo coins</small><b>🪙 ${esc(coinsNow)}</b></div><div class="stat"><small>Teams</small><b>${get('arenax_teams',[]).filter(t=>t.members.includes(currentName())).length}</b></div></div><div class="notice">Stats are stored locally on this device and may reset if browser data is cleared.</div>`};
+  // Persist join/coins and generate in-app notices by wrapping existing join function.
+  const oldJoin=window.join;
+  if(typeof oldJoin==='function')window.join=function(id){oldJoin(id);put('arenax_joined',joined);put('arenax_coins',coins);const t=data.find(x=>x.id===id);if(t)axAddNotice('Tournament joined',t.title+' join ho gaya.')};
+  const oldAddDemo=window.addDemo;
+  if(typeof oldAddDemo==='function')window.addDemo=function(n){oldAddDemo(n);put('arenax_coins',coins)};
+  const oldSubtract=window.subtractDemo;
+  if(typeof oldSubtract==='function')window.subtractDemo=function(n){oldSubtract(n);put('arenax_coins',coins)};
+  // expose pages from app menu after login; data remains a local prototype.
+})();
+</script>
+
+
+<style>
+/* ArenaX profile and tournament tools */
+.ax-profile-tools{margin-top:12px}.ax-avatar{width:76px;height:76px;border-radius:50%;object-fit:cover;background:#252e49;border:2px solid #7c5cff}
+.ax-mini-btn{border:1px solid #344064;background:#202b49;color:#fff;border-radius:10px;padding:10px;font-weight:700}
+.ax-player-line{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #293250}
+.ax-player-line img{width:38px;height:38px;border-radius:50%;object-fit:cover}
+.ax-release{border:1px solid #39476b;border-radius:12px;padding:12px;margin-top:10px;background:#10182c}
+</style>
+<script>
+(function(){
+ const $=id=>document.getElementById(id);
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
+ const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+ const playerKey=()=>localStorage.getItem('arenax_firebase_uid')||localStorage.getItem('arenax_mobile')||'demo-'+(localStorage.getItem('arenax_mobile')||'guest');
+ const playerName=()=>localStorage.getItem('arenax_name')||'Player';
+ const avatar=()=>localStorage.getItem('arenax_avatar')||'';
+ const defaultAvatar='data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="50" fill="#263454"/><circle cx="50" cy="36" r="18" fill="#aeb8d0"/><path d="M17 94c2-23 15-34 33-34s31 11 33 34" fill="#aeb8d0"/></svg>');
+ window.axOpenProfileTools=function(){
+   const old=$('axProfileTools');if(old)old.remove();
+   const card=document.createElement('div');card.id='axProfileTools';card.className='card ax-profile-tools';
+   card.innerHTML=`<div class="top" style="align-items:center"><img class="ax-avatar" src="${avatar()||defaultAvatar}" alt="Profile picture"><div style="flex:1"><h3 style="margin:0">Player Profile</h3><div class="muted">Customize your public player identity.</div></div></div>
+   <label class="muted" for="axProfileName">Profile name</label><input id="axProfileName" class="ax-input" maxlength="40" value="${esc(playerName())}" placeholder="Enter profile name">
+   <label class="muted" for="axProfilePicture">Profile picture</label><input id="axProfilePicture" class="ax-input" type="file" accept="image/*">
+   <button class="btn" id="axSaveProfile">Save Profile</button><div class="notice">Profile data is saved in this browser in this demo. Cross-device profiles require a shared database.</div>`;
+   $('content').appendChild(card);
+   if(!$('axLogout')){const out=document.createElement('button');out.id='axLogout';out.className='btn secondary';out.textContent='Log Out';out.onclick=()=>{localStorage.removeItem('arenax_logged_in');localStorage.removeItem('arenax_demo_auth');if($('loginScreen'))$('loginScreen').style.display='flex';$('loginStep1').style.display='block';$('loginStep2').style.display='none'};$('content').appendChild(out)}
+   $('axSaveProfile').onclick=()=>{const n=$('axProfileName').value.trim();if(n.length<2){alert('Enter a profile name with at least 2 characters.');return}localStorage.setItem('arenax_name',n);const f=$('axProfilePicture').files[0];if(f){if(f.size>1500000){alert('Choose an image smaller than 1.5 MB.');return}const r=new FileReader();r.onload=()=>{localStorage.setItem('arenax_avatar',r.result);alert('Profile saved.');profile()};r.readAsDataURL(f)}else{alert('Profile saved.');profile()}};
+ };
+ const originalProfile=window.profile;
+ if(typeof originalProfile==='function')window.profile=function(){originalProfile();window.axOpenProfileTools();};
+ window.axRoomParticipants=function(id){
+   const t=(window.data||[]).find(x=>x.id===Number(id));if(!t)return;
+   const joinedIds=read('arenax_joined',window.joined||[]);
+   const localJoined=(window.joined||[]).includes(t.id)||joinedIds.includes(t.id);
+   const members=read('arenax_participants_'+t.id,[]);
+   const mine={key:playerKey(),name:playerName(),avatar:avatar(),joinedAt:new Date().toISOString()};
+   if(localJoined&&!members.some(m=>m.key===mine.key)){members.push(mine);write('arenax_participants_'+t.id,members)}
+   openModal(`<h2>👥 Room Participants</h2><p class="muted">${esc(t.title)}</p><div class="notice">${members.length} participant profile(s) recorded on this device.</div>${members.map(m=>`<div class="ax-player-line"><img src="${m.avatar||defaultAvatar}" alt=""><div><b>${esc(m.name)}</b><div class="muted">ArenaX participant</div></div></div>`).join('')||'<p class="muted">No participant profiles recorded yet.</p>'}<div class="notice">Demo limitation: this list is stored locally. To show every player across different phones, connect a shared database and enforce participant access rules.</div><button class="btn" onclick="closeModal()">Close</button>`);
+ };
+ const originalOpen=window.openTournament;
+ if(typeof originalOpen==='function')window.openTournament=function(id){originalOpen(id);setTimeout(()=>{const room=$('roomInfo');if(room&&!$('axParticipantsBtn')){const b=document.createElement('button');b.id='axParticipantsBtn';b.className='btn secondary';b.textContent='View Room Participants';b.onclick=()=>window.axRoomParticipants(id);room.appendChild(b)}},0)};
+ const originalHub=window.axFeatureHub;
+ if(typeof originalHub==='function')window.axFeatureHub=function(){originalHub();setTimeout(()=>{const grid=document.querySelector('.ax-feature-grid');if(grid&&!$('axProfileFeature')){const b=document.createElement('button');b.id='axProfileFeature';b.className='ax-feature-btn';b.innerHTML='👤 Player Profile<small>Change name and profile picture</small>';b.onclick=()=>{closeModal();profile()};grid.appendChild(b)}},0)};
+ window.axRooms=function(){
+   const ids=read('arenax_joined',window.joined||[]), room=localStorage.getItem('arenax_room_id')||'', pass=localStorage.getItem('arenax_room_pass')||'';
+   const startRaw=localStorage.getItem('arenax_room_start')||'';
+   const start=startRaw?new Date(startRaw).getTime():NaN, now=Date.now(), released=Number.isFinite(start)&&now>=start-20*60*1000;
+   $('content').innerHTML=`<section class="hero"><h1>🔑 My Match Rooms</h1><p>Room credentials unlock 20 minutes before the scheduled match.</p></section>${ids.map(id=>{const t=(window.data||[]).find(x=>x.id===id);return t?`<div class="card"><b>${esc(t.title)}</b><p class="muted">${esc(t.type)} • ${esc(t.format||'')} • ${esc(t.map||'')}</p><div class="ax-release">${released&&room&&pass?`Room ID: <b>${esc(room)}</b><br>Room Password: <b>${esc(pass)}</b>`:`🔒 Room details are locked${Number.isFinite(start)?`<br>Release time: ${new Date(start-20*60*1000).toLocaleString()}`:'<br>Admin has not set a valid match date and time.'}`}</div><button class="btn secondary" onclick="axRoomParticipants(${t.id})">View Participants</button></div>`:''}).join('')||'<div class="empty">Join a tournament first.</div>'}<div class="notice">This demo uses local browser data. Shared participant lists and secure room access require a database/backend. Admin can save a match date/time in the room settings.</div>`;
+ };
+ // Add schedule field to admin room form and save its value.
+ const adminRoom=$('admRoomPass');
+ if(adminRoom&&$('admRoomStart')===null){const wrap=document.createElement('div');wrap.innerHTML='<label for="admRoomStart" class="muted">Match start date and time</label><input id="admRoomStart" class="admin-input" type="datetime-local"><div class="muted">Room details become visible to joined players 20 minutes before this time.</div>';adminRoom.parentElement.insertBefore(wrap,adminRoom.nextSibling)}
+ const oldSave=window.adminSaveRoom;
+ window.adminSaveRoom=function(){if(typeof oldSave==='function')oldSave();const s=$('admRoomStart')?.value;if(s){localStorage.setItem('arenax_room_start',new Date(s).toISOString());alert('Room release schedule saved. Credentials unlock 20 minutes before the match.')}};
+ // Fixed demo login: any valid 10-digit number, exact test code only.
+ const verify=$('verifyOtpBtn');
+ if(verify){verify.onclick=function(){const code=$('loginOtp')?.value.trim(), name=$('loginName')?.value.trim(), mobile=$('loginMobile')?.value.trim();const error=$('otpError'),screen=$('loginScreen');if(code!=='252528'){error.textContent='Incorrect demo OTP. Enter 252528.';error.style.display='block';return}if(!name||name.length<2||!/^[0-9]{10}$/.test(mobile)){alert('Enter a profile name and a valid 10-digit mobile number first.');return}localStorage.setItem('arenax_name',name);localStorage.setItem('arenax_mobile',mobile);localStorage.setItem('arenax_logged_in','1');localStorage.setItem('arenax_demo_auth','1');if(screen)screen.style.display='none';if(typeof home==='function')home();}};
+ const send=$('continueLoginBtn');
+ if(send){send.onclick=function(){const name=$('loginName').value.trim(),mobile=$('loginMobile').value.trim(),err=$('loginError');if(name.length<2){err.textContent='Enter a name with at least 2 characters.';err.style.display='block';return}if(!/^[0-9]{10}$/.test(mobile)){err.textContent='Enter a valid 10-digit mobile number.';err.style.display='block';return}err.style.display='none';$('loginStep1').style.display='none';$('loginStep2').style.display='block';$('firebaseOtpStatus').textContent='Demo mode: use OTP 252528. No SMS will be sent.';}};
+})();
+</script>
+
+
+<!-- ArenaX WhatsApp account-request integration -->
+<script>
+(function(){
+  const adminWhatsApp = "918302192172";
+  const requestMessage = "Hello ArenaX Admin, I want to get my Player User ID and Password. Please create my account.";
+  function connectGetIdButton(){
+    const candidates = Array.from(document.querySelectorAll('button, a'));
+    const target = candidates.find(el => /get your user id/i.test((el.innerText || el.textContent || '').trim()));
+    if (!target || target.dataset.axWhatsappConnected === '1') return;
+    target.dataset.axWhatsappConnected = '1';
+    target.addEventListener('click', function(ev){
+      ev.preventDefault();
+      const url = 'https://wa.me/' + adminWhatsApp + '?text=' + encodeURIComponent(requestMessage);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', connectGetIdButton);
+  else connectGetIdButton();
+  const observer = new MutationObserver(connectGetIdButton);
+  observer.observe(document.documentElement, {childList:true, subtree:true});
+  setTimeout(() => observer.disconnect(), 10000);
+})();
+</script>
+
+
+<!-- ArenaX User ID + Password login replacement -->
+<script>
+(function(){
+  const ADMIN_WA = "918302192172";
+  const requestText = "Hello ArenaX Admin, please create my ArenaX account and send me my unique User ID and Password.";
+  function initArenaXLogin(){
+    const screen = document.getElementById("loginScreen");
+    if(!screen) return;
+    screen.innerHTML = `
+      <div style="width:100%;max-width:420px;background:#141b31;border:1px solid #273452;border-radius:24px;padding:24px;box-sizing:border-box">
+        <div style="font-size:30px;font-weight:900;margin-bottom:5px">Arena<span style="color:#8d76ff">X</span></div>
+        <div class="muted" style="margin-bottom:22px">Sign in with your ArenaX account</div>
+        <label class="muted" for="axLoginUserId">User ID</label>
+        <input id="axLoginUserId" autocomplete="username" placeholder="Enter your User ID" maxlength="40" style="display:block;width:100%;box-sizing:border-box;margin:7px 0 15px;padding:13px;border-radius:12px;border:1px solid #2a3655;background:#0e1528;color:white;font-size:16px">
+        <label class="muted" for="axLoginPassword">Password</label>
+        <input id="axLoginPassword" type="password" autocomplete="current-password" placeholder="Enter your password" maxlength="100" style="display:block;width:100%;box-sizing:border-box;margin:7px 0 8px;padding:13px;border-radius:12px;border:1px solid #2a3655;background:#0e1528;color:white;font-size:16px">
+        <div id="axLoginError" style="display:none;color:#ff8090;font-size:13px;margin:8px 0"></div>
+        <button class="btn" id="axLoginBtn" type="button">Login</button>
+        <button class="btn secondary" id="axGetIdBtn" type="button">Get Your User ID</button>
+        <div class="notice">New player? Tap “Get Your User ID” to message the ArenaX admin on WhatsApp. The admin will create your account manually.</div>
+        <div class="muted" style="font-size:11px;margin-top:12px">Prototype note: account verification needs a secure backend. This static demo cannot securely verify admin-issued credentials across devices.</div>
+      </div>`;
+    const wasLoggedIn = localStorage.getItem("arenax_logged_in")==="1" && localStorage.getItem("arenax_demo_auth")==="userpass";
+    screen.style.display = wasLoggedIn ? "none" : "flex";
+    document.getElementById("axGetIdBtn").addEventListener("click", function(){
+      window.open("https://wa.me/"+ADMIN_WA+"?text="+encodeURIComponent(requestText), "_blank", "noopener,noreferrer");
+    });
+    // Firebase-backed login is attached by the module script below.
+    // Keep this fallback disabled so the UI never pretends local browser data is real authentication.
+    document.getElementById("axLoginBtn").addEventListener("click", function(){
+      const err=document.getElementById("axLoginError");
+      err.textContent="Connecting to secure login… Please try again in a moment.";
+      err.style.display="block";
+    });
+  }
+  window.arenaXLogout=function(){
+    localStorage.removeItem("arenax_logged_in");
+    localStorage.removeItem("arenax_demo_auth");
+    sessionStorage.removeItem("arenax_logged_in");
+    const screen=document.getElementById("loginScreen");
+    if(screen)screen.style.display="flex";
+    const id=document.getElementById("axLoginUserId"),pw=document.getElementById("axLoginPassword"),err=document.getElementById("axLoginError");
+    if(id)id.value="";if(pw)pw.value="";if(err)err.style.display="none";
+  };
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initArenaXLogin);else initArenaXLogin();
+})();
+</script>
+
+
+<!-- ArenaX Firebase User ID + Password authentication -->
+<script type="module">
+import { getApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+const userIdToEmail = (userId) => {
+  // User IDs use letters, numbers, dot, underscore, and hyphen only.
+  const normalized = userId.trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,40}$/.test(normalized)) {
+    throw new Error("User ID must be 3–40 characters and use only letters, numbers, dot, underscore, or hyphen.");
+  }
+  return normalized + "@arenax.app";
+};
+
+function setupFirebaseUserPasswordLogin() {
+  const button = document.getElementById("axLoginBtn");
+  if (!button || button.dataset.firebaseLoginBound === "1") return;
+  button.dataset.firebaseLoginBound = "1";
+
+  // Capture the click before the demo fallback handler so Firebase is the only login path.
+  document.addEventListener("click", async (event) => {
+    if (event.target !== button) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const idInput = document.getElementById("axLoginUserId");
+    const pwInput = document.getElementById("axLoginPassword");
+    const err = document.getElementById("axLoginError");
+    const uid = idInput.value.trim();
+    const password = pwInput.value;
+    err.style.display = "none";
+
+    if (!uid || !password) {
+      err.textContent = "Please enter both your User ID and password.";
+      err.style.display = "block";
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Logging in…";
+    try {
+      const email = userIdToEmail(uid);
+      const auth = getAuth(getApp());
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      const canonicalId = uid.toLowerCase();
+      localStorage.setItem("arenax_user_id", canonicalId);
+      localStorage.setItem("arenax_name", localStorage.getItem("arenax_name") || canonicalId);
+      localStorage.setItem("arenax_logged_in", "1");
+      localStorage.setItem("arenax_demo_auth", "userpass");
+      localStorage.setItem("arenax_firebase_uid", credential.user.uid);
+      document.getElementById("loginScreen").style.display = "none";
+      if (typeof home === "function") home();
+    } catch (error) {
+      console.error("ArenaX sign-in failed:", error);
+      let message = "Login failed. Check your User ID and password, then try again.";
+      if (error.code === "auth/operation-not-allowed") {
+        message = "Admin setup needed: enable Email/Password in Firebase Authentication settings.";
+      } else if (error.code === "auth/network-request-failed") {
+        message = "Network error. Check your internet connection and try again.";
+      } else if (error.message && error.message.startsWith("User ID must")) {
+        message = error.message;
+      }
+      err.textContent = message;
+      err.style.display = "block";
+    } finally {
+      button.disabled = false;
+      button.textContent = "Login";
+    }
+  }, true);
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupFirebaseUserPasswordLogin, { once: true });
+} else {
+  setupFirebaseUserPasswordLogin();
+}
+</script>
+
+</body>
+</html>
